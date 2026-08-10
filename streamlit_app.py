@@ -1,5 +1,5 @@
 import json
-import asyncio
+import time
 import streamlit as st
 from openai import OpenAI
 from browser_agent import BrowserAgent, BROWSER_TOOLS, execute_tool
@@ -23,6 +23,10 @@ with st.sidebar:
     if st.button("🗑️ Clear conversation"):
         st.session_state.messages = []
         st.session_state.browser_actions = []
+        # Close browser if open
+        if st.session_state.get("browser_agent"):
+            st.session_state.browser_agent.close()
+            st.session_state.browser_agent = None
         st.rerun()
     st.markdown("---")
     st.markdown("### 🌐 Browser Actions Log")
@@ -89,10 +93,17 @@ else:
 
         # Agent loop: call OpenAI, execute tools, repeat until no more tool calls
         max_iterations = 10
+        max_wall_time = 120  # 2-minute timeout for the entire agent loop
         screenshot_data = None
+        start_time = time.time()
 
         try:
             for iteration in range(max_iterations):
+                # Wall-clock timeout check
+                if time.time() - start_time > max_wall_time:
+                    st.warning("Browser agent timed out. Try simplifying your request.")
+                    break
+
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=api_messages,
@@ -127,7 +138,7 @@ else:
 
                     agent = st.session_state.browser_agent
 
-                    # Execute each tool call
+                    # Execute each tool call (sync API, no asyncio.run)
                     for tool_call in message.tool_calls:
                         tool_name = tool_call.function.name
                         try:
@@ -139,8 +150,8 @@ else:
                         action_str = f"→ {tool_name}({tool_args})"
                         st.session_state.browser_actions.append(action_str)
 
-                        # Execute the tool
-                        result = asyncio.run(execute_tool(agent, tool_name, tool_args))
+                        # Execute the tool (sync call, no asyncio)
+                        result = execute_tool(agent, tool_name, tool_args)
 
                         # Handle screenshots specially
                         if tool_name == "screenshot":
@@ -181,3 +192,7 @@ else:
                 st.error("Rate limit exceeded. Please wait a moment and try again.")
             else:
                 st.error(f"An error occurred: {error_msg}")
+            # Clean up browser on error
+            if st.session_state.get("browser_agent"):
+                st.session_state.browser_agent.close()
+                st.session_state.browser_agent = None
