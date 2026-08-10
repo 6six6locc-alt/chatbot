@@ -3,12 +3,15 @@ Browser Agent — Playwright-based browser automation for the chatbot.
 
 This module provides a simple interface for the AI to control a web browser:
 navigate, click, type, extract text, and take screenshots.
+
+Uses Playwright's sync API (not async) because Streamlit runs synchronously.
+The previous async version used asyncio.run() per tool call, which created a
+new event loop each time and destroyed Playwright objects bound to the
+previous loop. The sync API avoids this entirely.
 """
 
-import asyncio
 import base64
-import re
-from playwright.async_api import async_playwright
+from playwright.sync_api import sync_playwright
 
 
 class BrowserAgent:
@@ -20,35 +23,35 @@ class BrowserAgent:
         self._browser = None
         self._page = None
 
-    async def _ensure_browser(self):
+    def _ensure_browser(self):
         """Launch the browser if it hasn't been started yet."""
         if self._page is not None:
             return
-        self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(headless=self.headless)
-        self._page = await self._browser.new_page()
+        self._playwright = sync_playwright().start()
+        self._browser = self._playwright.chromium.launch(headless=self.headless)
+        self._page = self._browser.new_page()
 
-    async def navigate(self, url: str) -> str:
+    def navigate(self, url: str) -> str:
         """Navigate to a URL and return the page title."""
-        await self._ensure_browser()
+        self._ensure_browser()
         if not url.startswith("http"):
             url = "https://" + url
-        await self._page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        title = await self._page.title()
+        self._page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        title = self._page.title()
         return f"Navigated to {url}. Page title: {title}"
 
-    async def get_text(self, max_chars: int = 5000) -> str:
+    def get_text(self, max_chars: int = 5000) -> str:
         """Extract visible text content from the current page."""
-        await self._ensure_browser()
-        text = await self._page.inner_text("body")
+        self._ensure_browser()
+        text = self._page.inner_text("body")
         if len(text) > max_chars:
             text = text[:max_chars] + "\n... (truncated)"
         return text
 
-    async def get_links(self) -> str:
+    def get_links(self) -> str:
         """Extract all links from the current page."""
-        await self._ensure_browser()
-        links = await self._page.eval_on_selector_all(
+        self._ensure_browser()
+        links = self._page.eval_on_selector_all(
             "a[href]",
             """els => els.map(e => ({text: e.innerText.trim().substring(0, 80), href: e.href}))"""
         )
@@ -59,51 +62,57 @@ class BrowserAgent:
             lines.append(f"- [{link['text']}]({link['href']})")
         return "\n".join(lines)
 
-    async def click(self, selector: str) -> str:
+    def click(self, selector: str) -> str:
         """Click an element matching the CSS selector."""
-        await self._ensure_browser()
+        self._ensure_browser()
         try:
-            await self._page.click(selector, timeout=10000)
+            self._page.click(selector, timeout=10000)
             return f"Clicked element: {selector}"
         except Exception as e:
             return f"Failed to click '{selector}': {e}"
 
-    async def type_text(self, selector: str, text: str) -> str:
+    def type_text(self, selector: str, text: str) -> str:
         """Type text into an input element matching the CSS selector."""
-        await self._ensure_browser()
+        self._ensure_browser()
         try:
-            await self._page.fill(selector, text, timeout=10000)
+            self._page.fill(selector, text, timeout=10000)
             return f"Typed '{text}' into {selector}"
         except Exception as e:
             return f"Failed to type into '{selector}': {e}"
 
-    async def press_key(self, key: str) -> str:
+    def press_key(self, key: str) -> str:
         """Press a keyboard key (e.g. 'Enter', 'Tab')."""
-        await self._ensure_browser()
-        await self._page.keyboard.press(key)
+        self._ensure_browser()
+        self._page.keyboard.press(key)
         return f"Pressed key: {key}"
 
-    async def screenshot(self) -> str:
+    def screenshot(self) -> str:
         """Take a screenshot and return it as base64."""
-        await self._ensure_browser()
-        screenshot_bytes = await self._page.screenshot(full_page=False)
+        self._ensure_browser()
+        screenshot_bytes = self._page.screenshot(full_page=False)
         return base64.b64encode(screenshot_bytes).decode("utf-8")
 
-    async def scroll(self, direction: str = "down") -> str:
+    def scroll(self, direction: str = "down") -> str:
         """Scroll the page up or down."""
-        await self._ensure_browser()
+        self._ensure_browser()
         if direction == "down":
-            await self._page.mouse.wheel(0, 800)
+            self._page.mouse.wheel(0, 800)
         else:
-            await self._page.mouse.wheel(0, -800)
+            self._page.mouse.wheel(0, -800)
         return f"Scrolled {direction}"
 
-    async def close(self):
-        """Close the browser."""
-        if self._browser:
-            await self._browser.close()
-        if self._playwright:
-            await self._playwright.stop()
+    def close(self):
+        """Close the browser and release resources. Safe to call multiple times."""
+        try:
+            if self._browser:
+                self._browser.close()
+        except Exception:
+            pass
+        try:
+            if self._playwright:
+                self._playwright.stop()
+        except Exception:
+            pass
         self._page = None
         self._browser = None
         self._playwright = None
@@ -214,23 +223,31 @@ BROWSER_TOOLS = [
 ]
 
 
-async def execute_tool(agent: BrowserAgent, tool_name: str, arguments: dict) -> str:
-    """Execute a browser tool by name with the given arguments."""
+def execute_tool(agent: BrowserAgent, tool_name: str, arguments: dict) -> str:
+    """Execute a browser tool by name with the given arguments.
+
+    Returns a string result suitable for feeding back to the AI.
+    """
     if tool_name == "navigate":
-        return await agent.navigate(arguments.get("url", ""))
+        return agent.navigate(arguments.get("url", ""))
     elif tool_name == "get_text":
-        return await agent.get_text(arguments.get("max_chars", 5000))
+        return agent.get_text(arguments.get("max_chars", 5000))
     elif tool_name == "get_links":
-        return await agent.get_links()
+        return agent.get_links()
     elif tool_name == "click":
-        return await agent.click(arguments.get("selector", ""))
+        return agent.click(arguments.get("selector", ""))
     elif tool_name == "type_text":
-        return await agent.type_text(arguments.get("selector", ""), arguments.get("text", ""))
+        return agent.type_text(arguments.get("selector", ""), arguments.get("text", ""))
     elif tool_name == "press_key":
-        return await agent.press_key(arguments.get("key", "Enter"))
+        return agent.press_key(arguments.get("key", "Enter"))
     elif tool_name == "screenshot":
-        return await agent.screenshot()
+        return agent.screenshot()
     elif tool_name == "scroll":
-        return await agent.scroll(arguments.get("direction", "down"))
+        return agent.scroll(arguments.get("direction", "down"))
     else:
         return f"Unknown tool: {tool_name}"
+
+
+# ── Tool name validation ─────────────────────────────────────────────────────
+
+VALID_TOOL_NAMES = {t["function"]["name"] for t in BROWSER_TOOLS}
