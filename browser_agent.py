@@ -34,6 +34,8 @@ class BrowserAgent:
     def navigate(self, url: str) -> str:
         """Navigate to a URL and return the page title."""
         self._ensure_browser()
+        if not url or not url.strip():
+            return "Error: no URL provided."
         if not url.startswith("http"):
             url = "https://" + url
         self._page.goto(url, wait_until="domcontentloaded", timeout=30000)
@@ -65,7 +67,10 @@ class BrowserAgent:
     def click(self, selector: str) -> str:
         """Click an element matching the CSS selector."""
         self._ensure_browser()
+        if not selector or not selector.strip():
+            return "Error: no selector provided."
         try:
+            self._page.wait_for_selector(selector, timeout=10000)
             self._page.click(selector, timeout=10000)
             return f"Clicked element: {selector}"
         except Exception as e:
@@ -74,14 +79,17 @@ class BrowserAgent:
     def type_text(self, selector: str, text: str) -> str:
         """Type text into an input element matching the CSS selector."""
         self._ensure_browser()
+        if not selector or not selector.strip():
+            return "Error: no selector provided."
         try:
+            self._page.wait_for_selector(selector, timeout=10000)
             self._page.fill(selector, text, timeout=10000)
             return f"Typed '{text}' into {selector}"
         except Exception as e:
             return f"Failed to type into '{selector}': {e}"
 
     def press_key(self, key: str) -> str:
-        """Press a keyboard key (e.g. 'Enter', 'Tab')."""
+        """Press a keyboard key (e.g. 'Enter', 'Tab', 'Escape')."""
         self._ensure_browser()
         self._page.keyboard.press(key)
         return f"Pressed key: {key}"
@@ -118,7 +126,7 @@ class BrowserAgent:
         self._playwright = None
 
 
-# ── Tool definitions for the AI ──────────────────────────────────────────────
+# ── Tool definitions for the AI ──────────────────────────────────────────
 
 BROWSER_TOOLS = [
     {
@@ -222,7 +230,6 @@ BROWSER_TOOLS = [
     },
 ]
 
-
 def execute_tool(agent: BrowserAgent, tool_name: str, arguments: dict) -> str:
     """Execute a browser tool by name with the given arguments.
 
@@ -248,6 +255,6 @@ def execute_tool(agent: BrowserAgent, tool_name: str, arguments: dict) -> str:
         return f"Unknown tool: {tool_name}"
 
 
-# ── Tool name validation ─────────────────────────────────────────────────────
+# ── Tool name validation ──────────────────────────────────────────────────
 
 VALID_TOOL_NAMES = {t["function"]["name"] for t in BROWSER_TOOLS}
