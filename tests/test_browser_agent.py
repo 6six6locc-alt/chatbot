@@ -1,13 +1,14 @@
-"""Tests for browser_agent.py — tool definitions, dispatch, and URL normalization.
+"""
+Tests for browser_agent.py — tool definitions, dispatch, and URL normalization.
 
 These tests do NOT launch a real browser. They validate:
 - Tool definitions are well-formed
 - execute_tool dispatches correctly
 - URL normalization in navigate() (mocked)
 - VALID_TOOL_NAMES matches BROWSER_TOOLS
+- Input validation for empty/missing arguments
 """
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,7 +16,7 @@ import pytest
 from browser_agent import BROWSER_TOOLS, VALID_TOOL_NAMES, execute_tool, BrowserAgent
 
 
-# ── Tool definition tests ───────────────────────────────────────────────────
+# ── Tool definition tests ──────────────────────────────────────────────────
 
 def test_all_tools_have_names():
     """Every tool in BROWSER_TOOLS must have a function name."""
@@ -53,7 +54,7 @@ def test_tools_have_valid_parameter_schemas():
         assert params.get("type") == "object" or "properties" in params
 
 
-# ── execute_tool dispatch tests ───────────────────────────────────────────────
+# ── execute_tool dispatch tests ────────────────────────────────────────────
 
 def test_execute_tool_unknown_returns_error():
     """execute_tool should return an error message for unknown tools."""
@@ -119,7 +120,40 @@ def test_execute_tool_scroll_default():
     agent.scroll.assert_called_once_with("down")
 
 
-# ── URL normalization tests ───────────────────────────────────────────────────
+# ── Input validation tests ─────────────────────────────────────────────────
+
+def test_navigate_empty_url_returns_error():
+    """navigate() should return an error message for empty URL."""
+    agent = BrowserAgent(headless=True)
+    result = agent.navigate("")
+    assert "Error" in result
+    assert "no URL" in result
+
+
+def test_navigate_whitespace_url_returns_error():
+    """navigate() should return an error message for whitespace-only URL."""
+    agent = BrowserAgent(headless=True)
+    result = agent.navigate("   ")
+    assert "Error" in result
+
+
+def test_click_empty_selector_returns_error():
+    """click() should return an error message for empty selector."""
+    agent = BrowserAgent(headless=True)
+    result = agent.click("")
+    assert "Error" in result
+    assert "no selector" in result
+
+
+def test_type_text_empty_selector_returns_error():
+    """type_text() should return an error message for empty selector."""
+    agent = BrowserAgent(headless=True)
+    result = agent.type_text("", "hello")
+    assert "Error" in result
+    assert "no selector" in result
+
+
+# ── URL normalization tests ────────────────────────────────────────────────
 
 def test_url_normalization_adds_https():
     """navigate() should prepend https:// if the URL lacks a protocol."""
@@ -155,7 +189,7 @@ def test_url_normalization_preserves_https():
         assert called_url == "https://example.com"
 
 
-# ── BrowserAgent.close() tests ────────────────────────────────────────────────
+# ── BrowserAgent.close() tests ─────────────────────────────────────────────
 
 def test_close_safe_when_not_started():
     """close() should not raise if the browser was never started."""
