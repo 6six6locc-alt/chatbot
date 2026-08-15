@@ -7,16 +7,15 @@ These tests do NOT launch a real browser. They validate:
 - URL normalization in navigate() (mocked)
 - VALID_TOOL_NAMES matches BROWSER_TOOLS
 - Input validation for empty/missing arguments
+- Exception and error resilience across all browser methods
 """
 
 from unittest.mock import MagicMock, patch
-
 import pytest
-
 from browser_agent import BROWSER_TOOLS, VALID_TOOL_NAMES, execute_tool, BrowserAgent
 
 
-# ── Tool definition tests ──────────────────────────────────────────────────
+# ── Tool definition tests ────────────────────────────────────────────
 
 def test_all_tools_have_names():
     """Every tool in BROWSER_TOOLS must have a function name."""
@@ -54,7 +53,7 @@ def test_tools_have_valid_parameter_schemas():
         assert params.get("type") == "object" or "properties" in params
 
 
-# ── execute_tool dispatch tests ────────────────────────────────────────────
+# ── execute_tool dispatch tests ──────────────────────────────────────
 
 def test_execute_tool_unknown_returns_error():
     """execute_tool should return an error message for unknown tools."""
@@ -120,7 +119,7 @@ def test_execute_tool_scroll_default():
     agent.scroll.assert_called_once_with("down")
 
 
-# ── Input validation tests ─────────────────────────────────────────────────
+# ── Input validation tests ───────────────────────────────────────────
 
 def test_navigate_empty_url_returns_error():
     """navigate() should return an error message for empty URL."""
@@ -153,7 +152,23 @@ def test_type_text_empty_selector_returns_error():
     assert "no selector" in result
 
 
-# ── URL normalization tests ────────────────────────────────────────────────
+def test_press_key_empty_key_returns_error():
+    """press_key() should return an error message for empty key."""
+    agent = BrowserAgent(headless=True)
+    result = agent.press_key("")
+    assert "Error" in result
+    assert "no key" in result
+
+
+def test_press_key_whitespace_key_returns_error():
+    """press_key() should return an error message for whitespace key."""
+    agent = BrowserAgent(headless=True)
+    result = agent.press_key("   ")
+    assert "Error" in result
+    assert "no key" in result
+
+
+# ── URL normalization tests ──────────────────────────────────────────
 
 def test_url_normalization_adds_https():
     """navigate() should prepend https:// if the URL lacks a protocol."""
@@ -189,7 +204,75 @@ def test_url_normalization_preserves_https():
         assert called_url == "https://example.com"
 
 
-# ── BrowserAgent.close() tests ─────────────────────────────────────────────
+# ── Exception / Resilience tests ──────────────────────────────────────
+
+def test_navigate_exception_returns_error_message():
+    """navigate() should return error message if page.goto raises."""
+    agent = BrowserAgent(headless=True)
+    with patch.object(agent, "_ensure_browser"):
+        agent._page = MagicMock()
+        agent._page.goto.side_effect = Exception("Net connection timeout")
+        result = agent.navigate("https://invalid-nonexistent-domain.xyz")
+        assert "Failed to navigate" in result
+        assert "Net connection timeout" in result
+
+
+def test_get_text_exception_returns_error_message():
+    """get_text() should return error message if page.inner_text raises."""
+    agent = BrowserAgent(headless=True)
+    with patch.object(agent, "_ensure_browser"):
+        agent._page = MagicMock()
+        agent._page.inner_text.side_effect = Exception("Target closed")
+        result = agent.get_text()
+        assert "Failed to get text" in result
+        assert "Target closed" in result
+
+
+def test_get_links_exception_returns_error_message():
+    """get_links() should return error message if eval_on_selector_all raises."""
+    agent = BrowserAgent(headless=True)
+    with patch.object(agent, "_ensure_browser"):
+        agent._page = MagicMock()
+        agent._page.eval_on_selector_all.side_effect = Exception("Evaluation failed")
+        result = agent.get_links()
+        assert "Failed to get links" in result
+        assert "Evaluation failed" in result
+
+
+def test_press_key_exception_returns_error_message():
+    """press_key() should return error message if keyboard.press raises."""
+    agent = BrowserAgent(headless=True)
+    with patch.object(agent, "_ensure_browser"):
+        agent._page = MagicMock()
+        agent._page.keyboard.press.side_effect = Exception("Key press failed")
+        result = agent.press_key("Enter")
+        assert "Failed to press key" in result
+        assert "Key press failed" in result
+
+
+def test_screenshot_exception_returns_error_message():
+    """screenshot() should return error message if page.screenshot raises."""
+    agent = BrowserAgent(headless=True)
+    with patch.object(agent, "_ensure_browser"):
+        agent._page = MagicMock()
+        agent._page.screenshot.side_effect = Exception("Screenshot error")
+        result = agent.screenshot()
+        assert "Failed to take screenshot" in result
+        assert "Screenshot error" in result
+
+
+def test_scroll_exception_returns_error_message():
+    """scroll() should return error message if mouse.wheel raises."""
+    agent = BrowserAgent(headless=True)
+    with patch.object(agent, "_ensure_browser"):
+        agent._page = MagicMock()
+        agent._page.mouse.wheel.side_effect = Exception("Mouse scroll error")
+        result = agent.scroll("down")
+        assert "Failed to scroll" in result
+        assert "Mouse scroll error" in result
+
+
+# ── BrowserAgent.close() tests ───────────────────────────────────────
 
 def test_close_safe_when_not_started():
     """close() should not raise if the browser was never started."""
