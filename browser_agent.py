@@ -36,33 +36,43 @@ class BrowserAgent:
         self._ensure_browser()
         if not url or not url.strip():
             return "Error: no URL provided."
-        if not url.startswith("http"):
+        url = url.strip()
+        if not url.startswith("http://") and not url.startswith("https://"):
             url = "https://" + url
-        self._page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        title = self._page.title()
-        return f"Navigated to {url}. Page title: {title}"
+        try:
+            self._page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            title = self._page.title()
+            return f"Navigated to {url}. Page title: {title}"
+        except Exception as e:
+            return f"Failed to navigate to '{url}': {e}"
 
     def get_text(self, max_chars: int = 5000) -> str:
         """Extract visible text content from the current page."""
         self._ensure_browser()
-        text = self._page.inner_text("body")
-        if len(text) > max_chars:
-            text = text[:max_chars] + "\n... (truncated)"
-        return text
+        try:
+            text = self._page.inner_text("body")
+            if len(text) > max_chars:
+                text = text[:max_chars] + "\n... (truncated)"
+            return text
+        except Exception as e:
+            return f"Failed to get text: {e}"
 
     def get_links(self) -> str:
         """Extract all links from the current page."""
         self._ensure_browser()
-        links = self._page.eval_on_selector_all(
-            "a[href]",
-            """els => els.map(e => ({text: e.innerText.trim().substring(0, 80), href: e.href}))"""
-        )
-        if not links:
-            return "No links found on this page."
-        lines = []
-        for link in links[:20]:
-            lines.append(f"- [{link['text']}]({link['href']})")
-        return "\n".join(lines)
+        try:
+            links = self._page.eval_on_selector_all(
+                "a[href]",
+                """els => els.map(e => ({text: e.innerText.trim().substring(0, 80), href: e.href}))"""
+            )
+            if not links:
+                return "No links found on this page."
+            lines = []
+            for link in links[:20]:
+                lines.append(f"- [{link['text']}]({link['href']})")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Failed to get links: {e}"
 
     def click(self, selector: str) -> str:
         """Click an element matching the CSS selector."""
@@ -91,23 +101,34 @@ class BrowserAgent:
     def press_key(self, key: str) -> str:
         """Press a keyboard key (e.g. 'Enter', 'Tab', 'Escape')."""
         self._ensure_browser()
-        self._page.keyboard.press(key)
-        return f"Pressed key: {key}"
+        if not key or not key.strip():
+            return "Error: no key provided."
+        try:
+            self._page.keyboard.press(key)
+            return f"Pressed key: {key}"
+        except Exception as e:
+            return f"Failed to press key '{key}': {e}"
 
     def screenshot(self) -> str:
         """Take a screenshot and return it as base64."""
         self._ensure_browser()
-        screenshot_bytes = self._page.screenshot(full_page=False)
-        return base64.b64encode(screenshot_bytes).decode("utf-8")
+        try:
+            screenshot_bytes = self._page.screenshot(full_page=False)
+            return base64.b64encode(screenshot_bytes).decode("utf-8")
+        except Exception as e:
+            return f"Failed to take screenshot: {e}"
 
     def scroll(self, direction: str = "down") -> str:
         """Scroll the page up or down."""
         self._ensure_browser()
-        if direction == "down":
-            self._page.mouse.wheel(0, 800)
-        else:
-            self._page.mouse.wheel(0, -800)
-        return f"Scrolled {direction}"
+        try:
+            if direction == "down":
+                self._page.mouse.wheel(0, 800)
+            else:
+                self._page.mouse.wheel(0, -800)
+            return f"Scrolled {direction}"
+        except Exception as e:
+            return f"Failed to scroll: {e}"
 
     def close(self):
         """Close the browser and release resources. Safe to call multiple times."""
@@ -126,7 +147,7 @@ class BrowserAgent:
         self._playwright = None
 
 
-# ── Tool definitions for the AI ──────────────────────────────────────────
+# ── Tool definitions for the AI ──────────────────────────────────────
 
 BROWSER_TOOLS = [
     {
@@ -255,6 +276,6 @@ def execute_tool(agent: BrowserAgent, tool_name: str, arguments: dict) -> str:
         return f"Unknown tool: {tool_name}"
 
 
-# ── Tool name validation ──────────────────────────────────────────────────
+# ── Tool name validation ─────────────────────────────────────────────
 
 VALID_TOOL_NAMES = {t["function"]["name"] for t in BROWSER_TOOLS}
