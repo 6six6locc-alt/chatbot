@@ -15,7 +15,7 @@ import pytest
 from browser_agent import BROWSER_TOOLS, VALID_TOOL_NAMES, execute_tool, BrowserAgent
 
 
-# ── Tool definition tests ────────────────────────────────────────────
+# ── Tool definition tests ─────────────────────────────────────────────
 
 def test_all_tools_have_names():
     """Every tool in BROWSER_TOOLS must have a function name."""
@@ -53,7 +53,7 @@ def test_tools_have_valid_parameter_schemas():
         assert params.get("type") == "object" or "properties" in params
 
 
-# ── execute_tool dispatch tests ──────────────────────────────────────
+# ── execute_tool dispatch tests ───────────────────────────────────────
 
 def test_execute_tool_unknown_returns_error():
     """execute_tool should return an error message for unknown tools."""
@@ -119,7 +119,7 @@ def test_execute_tool_scroll_default():
     agent.scroll.assert_called_once_with("down")
 
 
-# ── Input validation tests ───────────────────────────────────────────
+# ── Input validation tests ────────────────────────────────────────────
 
 def test_navigate_empty_url_returns_error():
     """navigate() should return an error message for empty URL."""
@@ -168,7 +168,33 @@ def test_press_key_whitespace_key_returns_error():
     assert "no key" in result
 
 
-# ── URL normalization tests ──────────────────────────────────────────
+def test_scroll_invalid_direction_returns_error():
+    """scroll() should return an error message for invalid direction."""
+    agent = BrowserAgent(headless=True)
+    result = agent.scroll("left")
+    assert "Error" in result
+    assert "invalid scroll direction" in result
+
+
+def test_scroll_empty_direction_returns_error():
+    """scroll() should return an error message for empty direction."""
+    agent = BrowserAgent(headless=True)
+    result = agent.scroll("")
+    assert "Error" in result
+    assert "invalid scroll direction" in result
+
+
+def test_scroll_direction_case_insensitive():
+    """scroll() should accept case-insensitive direction and trim whitespace."""
+    agent = BrowserAgent(headless=True)
+    with patch.object(agent, "_ensure_browser"):
+        agent._page = MagicMock()
+        result = agent.scroll("  UP  ")
+        assert result == "Scrolled up"
+        agent._page.mouse.wheel.assert_called_once_with(0, -800)
+
+
+# ── URL normalization tests ───────────────────────────────────────────
 
 def test_url_normalization_adds_https():
     """navigate() should prepend https:// if the URL lacks a protocol."""
@@ -189,6 +215,7 @@ def test_url_normalization_preserves_http():
         agent._page = MagicMock()
         agent._page.title.return_value = "Test Page"
         agent.navigate("http://example.com")
+        agent._page.goto.assert_called_once()
         called_url = agent._page.goto.call_args[0][0]
         assert called_url == "http://example.com"
 
@@ -200,6 +227,7 @@ def test_url_normalization_preserves_https():
         agent._page = MagicMock()
         agent._page.title.return_value = "Test Page"
         agent.navigate("https://example.com")
+        agent._page.goto.assert_called_once()
         called_url = agent._page.goto.call_args[0][0]
         assert called_url == "https://example.com"
 
@@ -272,7 +300,7 @@ def test_scroll_exception_returns_error_message():
         assert "Mouse scroll error" in result
 
 
-# ── BrowserAgent.close() tests ───────────────────────────────────────
+# ── BrowserAgent.close() tests ────────────────────────────────────────
 
 def test_close_safe_when_not_started():
     """close() should not raise if the browser was never started."""
@@ -280,13 +308,19 @@ def test_close_safe_when_not_started():
     agent.close()  # should not raise
 
 
-def test_close_clears_state():
-    """close() should clear all internal state."""
+def test_close_clears_state_and_closes_page():
+    """close() should close page, browser, stop playwright, and clear state."""
     agent = BrowserAgent(headless=True)
-    agent._browser = MagicMock()
-    agent._playwright = MagicMock()
-    agent._page = MagicMock()
+    mock_browser = MagicMock()
+    mock_playwright = MagicMock()
+    mock_page = MagicMock()
+    agent._browser = mock_browser
+    agent._playwright = mock_playwright
+    agent._page = mock_page
     agent.close()
+    mock_page.close.assert_called_once()
+    mock_browser.close.assert_called_once()
+    mock_playwright.stop.assert_called_once()
     assert agent._browser is None
     assert agent._playwright is None
     assert agent._page is None
