@@ -52,7 +52,7 @@ class BrowserAgent:
         try:
             text = self._page.inner_text("body")
             if len(text) > max_chars:
-                text = text[:max_chars] + "\n... (truncated)"
+                text = text[:max_chars] + "\n.... (truncated)"
             return text
         except Exception as e:
             return f"Failed to get text: {e}"
@@ -121,17 +121,25 @@ class BrowserAgent:
     def scroll(self, direction: str = "down") -> str:
         """Scroll the page up or down."""
         self._ensure_browser()
+        norm_direction = direction.strip().lower() if direction else ""
+        if norm_direction not in ("up", "down"):
+            return f"Error: invalid scroll direction '{direction}'. Use 'up' or 'down'."
         try:
-            if direction == "down":
+            if norm_direction == "down":
                 self._page.mouse.wheel(0, 800)
             else:
                 self._page.mouse.wheel(0, -800)
-            return f"Scrolled {direction}"
+            return f"Scrolled {norm_direction}"
         except Exception as e:
             return f"Failed to scroll: {e}"
 
     def close(self):
         """Close the browser and release resources. Safe to call multiple times."""
+        try:
+            if self._page:
+                self._page.close()
+        except Exception:
+            pass
         try:
             if self._browser:
                 self._browser.close()
@@ -276,6 +284,6 @@ def execute_tool(agent: BrowserAgent, tool_name: str, arguments: dict) -> str:
         return f"Unknown tool: {tool_name}"
 
 
-# ── Tool name validation ─────────────────────────────────────────────
+# ── Tool name validation ──────────────────────────────────────────────
 
 VALID_TOOL_NAMES = {t["function"]["name"] for t in BROWSER_TOOLS}

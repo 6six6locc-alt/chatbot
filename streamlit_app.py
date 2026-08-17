@@ -16,7 +16,7 @@ def classify_api_error(error_msg: str) -> str:
         return f"An error occurred while contacting the OpenAI API: {error_msg}"
 
 
-# ── Page config ──────────────────────────────────────────────────────────────
+# ── Page config ───────────────────────────────────────────────────────
 
 st.set_page_config(page_title="🤖 Browser Chatbot", page_icon="🤖", layout="wide")
 st.title("🤖 Browser Chatbot")
@@ -26,7 +26,7 @@ st.write(
     "Get your free OpenAI API key [here](https://platform.openai.com/account/api-keys)."
 )
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
+# ── Sidebar ───────────────────────────────────────────────────────────
 
 with st.sidebar:
     st.header("⚙️ Settings")
@@ -45,9 +45,9 @@ with st.sidebar:
     if "browser_actions" not in st.session_state:
         st.session_state.browser_actions = []
     for action in st.session_state.browser_actions:
-        st.markdown(f"``{action}``")
+        st.markdown(f"`{action}`")
 
-# ── Main app ──────────────────────────────────────────────────────────────────
+# ── Main app ──────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are a helpful AI assistant that can control a web browser.
 When the user asks you to do something on the web, use the browser tools to accomplish it.
@@ -92,7 +92,6 @@ else:
 
     # Chat input
     if prompt := st.chat_input("Ask me to browse the web..."):
-
         # Store and display user message
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -159,7 +158,7 @@ else:
                             tool_args = {}
 
                         # Log the action
-                        action_str = f"→ {tool_name}({tool_args})"
+                        action_str = f"➔ {tool_name}({tool_args})"
                         st.session_state.browser_actions.append(action_str)
 
                         # Execute the tool (sync call, no asyncio)
@@ -167,8 +166,9 @@ else:
 
                         # Handle screenshots specially
                         if tool_name == "screenshot":
-                            screenshot_data = result
-                            result = "Screenshot taken."
+                            if not result.startswith("Failed"):
+                                screenshot_data = result
+                                result = "Screenshot taken."
 
                         # Add tool result to conversation
                         api_messages.append({
